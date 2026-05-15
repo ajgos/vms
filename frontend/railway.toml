@@ -1,0 +1,9 @@
+[build]
+dockerfilePath = "Dockerfile.railway"
+
+[build.args]
+NEXT_PUBLIC_API_URL = "$NEXT_PUBLIC_API_URL"
+
+[deploy]
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
