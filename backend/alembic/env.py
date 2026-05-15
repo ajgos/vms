@@ -14,7 +14,10 @@ if config.config_file_name is not None:
 
 # Import all models so Alembic can detect them
 from app.core.database import Base
+from app.core.config import settings
 import app.models  # noqa: F401
+
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 target_metadata = Base.metadata
 
