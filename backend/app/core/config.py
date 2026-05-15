@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     SECRET_KEY: str = "dev-secret"
     SETUP_SECRET: str = "dev-setup-secret"
+    FRONTEND_URL: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
