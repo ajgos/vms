@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.activity import ActivityLog
 from app.models.onboarding import OnboardingChecklist
+from app.models.project import Project, ProjectApplication, ProjectStatus, ApplicationStatus
 from app.models.volunteer import JourneyStage, Volunteer
 from app.schemas.onboarding import DashboardResponse
 
@@ -44,6 +45,25 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
         )
     )
 
+    total_projects = await db.scalar(select(func.count(Project.id)))
+
+    active_projects = await db.scalar(
+        select(func.count(Project.id)).where(Project.status == ProjectStatus.active)
+    )
+
+    total_applications = await db.scalar(select(func.count(ProjectApplication.id)))
+
+    pending_applications = await db.scalar(
+        select(func.count(ProjectApplication.id)).where(
+            ProjectApplication.status == ApplicationStatus.pending
+        )
+    )
+
+    project_status_rows = await db.execute(
+        select(Project.status, func.count(Project.id)).group_by(Project.status)
+    )
+    project_status_breakdown = {row[0].value: row[1] for row in project_status_rows}
+
     return DashboardResponse(
         total_volunteers=total or 0,
         active_volunteers=active or 0,
@@ -51,4 +71,9 @@ async def get_dashboard(db: AsyncSession = Depends(get_db)):
         onboarding_completed=onboarding_done or 0,
         stage_breakdown=stage_breakdown,
         pending_compliance=pending_compliance or 0,
+        total_projects=total_projects or 0,
+        active_projects=active_projects or 0,
+        total_applications=total_applications or 0,
+        pending_applications=pending_applications or 0,
+        project_status_breakdown=project_status_breakdown,
     )

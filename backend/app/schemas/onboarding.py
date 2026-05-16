@@ -44,3 +44,8 @@ class DashboardResponse(BaseModel):
     onboarding_completed: int
     stage_breakdown: dict[str, int]
     pending_compliance: int
+    total_projects: int
+    active_projects: int
+    total_applications: int
+    pending_applications: int
+    project_status_breakdown: dict[str, int]

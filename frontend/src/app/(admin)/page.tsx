@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import api, { DashboardData } from "@/lib/api";
 import { STAGE_LABELS } from "@/lib/utils";
-import { Users, Clock, CheckCircle, AlertTriangle, TrendingUp } from "lucide-react";
+import { Users, Clock, CheckCircle, AlertTriangle, TrendingUp, FolderOpen, FileText } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -14,6 +14,18 @@ const STAGE_CHART_COLORS: Record<string, string> = {
   Returning: "#fbbf24",
   Alumni: "#a78bfa",
   Ambassador: "#fb923c",
+};
+
+const PROJECT_STATUS_COLORS: Record<string, string> = {
+  draft: "#94a3b8",
+  active: "#34d399",
+  closed: "#f87171",
+};
+
+const PROJECT_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  active: "Active",
+  closed: "Closed",
 };
 
 function StatCard({
@@ -70,6 +82,12 @@ export default function DashboardPage() {
     count,
   }));
 
+  const projectStatusData = Object.entries(data.project_status_breakdown).map(([status, count]) => ({
+    status: PROJECT_STATUS_LABELS[status] || status,
+    count,
+    color: PROJECT_STATUS_COLORS[status] || "#94a3b8",
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -82,6 +100,13 @@ export default function DashboardPage() {
         <StatCard label="Active Volunteers"   value={data.active_volunteers}    icon={TrendingUp}    color="bg-emerald-50 text-emerald-600" />
         <StatCard label="Hours Logged"        value={data.total_hours_logged}   icon={Clock}         color="bg-violet-50 text-violet-600"    sub="cumulative" />
         <StatCard label="Onboarding Complete" value={data.onboarding_completed} icon={CheckCircle}   color="bg-primary-50 text-primary-600" />
+      </div>
+
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard label="Total Projects"      value={data.total_projects}       icon={FolderOpen}    color="bg-orange-50 text-orange-600" />
+        <StatCard label="Active Projects"     value={data.active_projects}      icon={FolderOpen}    color="bg-teal-50 text-teal-600" />
+        <StatCard label="Total Applications"  value={data.total_applications}   icon={FileText}      color="bg-indigo-50 text-indigo-600" />
+        <StatCard label="Pending Applications" value={data.pending_applications} icon={FileText}     color="bg-amber-50 text-amber-600" sub="awaiting review" />
       </div>
 
       {data.pending_compliance > 0 && (
@@ -142,6 +167,44 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">Projects by Status</h2>
+        {projectStatusData.length === 0 ? (
+          <p className="text-slate-400 text-sm">No projects yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-6">
+            {projectStatusData.map(({ status, count, color }) => (
+              <div key={status} className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-sm text-slate-600 font-medium">{status}</span>
+                <span className="text-lg font-bold text-slate-900">{count}</span>
+              </div>
+            ))}
+            <div className="w-full mt-2 space-y-2">
+              {projectStatusData.map(({ status, count, color }) => {
+                const pct = data.total_projects > 0
+                  ? Math.round((count / data.total_projects) * 100)
+                  : 0;
+                return (
+                  <div key={status}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-600 font-medium">{status}</span>
+                      <span className="text-slate-400">{count} ({pct}%)</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

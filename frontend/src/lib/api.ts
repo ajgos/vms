@@ -95,6 +95,11 @@ export interface DashboardData {
   onboarding_completed: number;
   stage_breakdown: Record<string, number>;
   pending_compliance: number;
+  total_projects: number;
+  active_projects: number;
+  total_applications: number;
+  pending_applications: number;
+  project_status_breakdown: Record<string, number>;
 }
 
 export interface Project {
