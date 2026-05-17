@@ -7,6 +7,7 @@ import { STAGE_COLORS, STAGE_LABELS } from "@/lib/utils";
 import {
   ArrowLeft, Pencil, MapPin, GraduationCap, Briefcase, Clock,
   CheckCircle2, XCircle, Calendar, Activity, Upload, FileText, ExternalLink,
+  FolderKanban,
 } from "lucide-react";
 
 const STAGES: JourneyStage[] = ["lead", "onboarded", "active", "returning", "alumni", "ambassador"];
@@ -17,22 +18,37 @@ const MODE_COLORS: Record<string, string> = {
   hybrid:  "bg-violet-50 text-violet-700",
 };
 
+interface StaffedProject {
+  application_id: string;
+  project_id: string;
+  project_name: string;
+  program?: string;
+  project_status: string;
+  application_status: string;
+  applied_at: string;
+  start_date?: string;
+  end_date?: string;
+}
+
 export default function VolunteerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const [volunteer,  setVolunteer]  = useState<Volunteer | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingChecklist | null>(null);
   const [logs,       setLogs]       = useState<ActivityLog[]>([]);
+  const [projects,   setProjects]   = useState<StaffedProject[]>([]);
 
   useEffect(() => {
     Promise.all([
       api.get<Volunteer>(`/volunteers/${id}`),
       api.get<OnboardingChecklist>(`/onboarding/${id}`),
       api.get<ActivityLog[]>("/activity-logs", { params: { volunteer_id: id } }),
-    ]).then(([vRes, oRes, lRes]) => {
+      api.get<StaffedProject[]>(`/volunteers/${id}/projects`),
+    ]).then(([vRes, oRes, lRes, pRes]) => {
       setVolunteer(vRes.data);
       setOnboarding(oRes.data);
       setLogs(lRes.data);
+      setProjects(pRes.data);
     });
   }, [id]);
 
@@ -268,6 +284,64 @@ export default function VolunteerDetailPage() {
           </div>
         ) : (
           <p className="text-sm text-slate-400">No documents uploaded yet.</p>
+        )}
+      </div>
+
+      {/* Staffed Projects */}
+      <div className="card overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <FolderKanban className="w-4 h-4 text-slate-400" />
+          <h2 className="text-sm font-semibold text-slate-700">Staffed Projects</h2>
+          <span className="text-xs text-slate-400 ml-auto">{projects.length} project{projects.length !== 1 ? "s" : ""}</span>
+        </div>
+        {projects.length === 0 ? (
+          <div className="px-5 py-8 text-center text-slate-400 text-sm">Not assigned to any projects yet.</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {projects.map((p) => (
+              <Link
+                key={p.application_id}
+                href={`/projects/${p.project_id}`}
+                className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 transition-colors group"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 group-hover:text-primary-600 truncate transition-colors">
+                    {p.project_name}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {p.program && (
+                      <span className="text-xs text-slate-400">{p.program}</span>
+                    )}
+                    {(p.start_date || p.end_date) && (
+                      <span className="flex items-center gap-1 text-xs text-slate-400">
+                        <Calendar className="w-3 h-3" />
+                        {p.start_date ? new Date(p.start_date).toLocaleDateString() : ""}
+                        {p.start_date && p.end_date ? " — " : ""}
+                        {p.end_date ? new Date(p.end_date).toLocaleDateString() : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
+                    p.application_status === "approved" ? "bg-emerald-50 text-emerald-700" :
+                    p.application_status === "rejected" ? "bg-red-50 text-red-600" :
+                    "bg-amber-50 text-amber-700"
+                  }`}>
+                    {p.application_status}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${
+                    p.project_status === "active" ? "bg-teal-50 text-teal-700" :
+                    p.project_status === "closed" ? "bg-slate-100 text-slate-500" :
+                    "bg-slate-100 text-slate-500"
+                  }`}>
+                    {p.project_status}
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-primary-400 transition-colors" />
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 

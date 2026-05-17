@@ -11,6 +11,7 @@ from app.core.auth import require_admin
 from app.core.database import get_db
 from app.models.activity import ActivityLog
 from app.models.onboarding import OnboardingChecklist
+from app.models.project import Project, ProjectApplication
 from app.models.volunteer import (
     ApprovalStatus, JourneyStage, JourneyStageHistory, Volunteer,
     VolunteerInterest, VolunteerLanguage, VolunteerSkill,
@@ -219,3 +220,29 @@ async def delete_volunteer(volunteer_id: UUID, db: AsyncSession = Depends(get_db
     v = await _get_volunteer_or_404(db, volunteer_id)
     await db.delete(v)
     await db.commit()
+
+
+@router.get("/{volunteer_id}/projects")
+async def get_volunteer_projects(volunteer_id: UUID, db: AsyncSession = Depends(get_db)):
+    await _get_volunteer_or_404(db, volunteer_id)
+    result = await db.execute(
+        select(ProjectApplication, Project.name, Project.program, Project.status, Project.start_date, Project.end_date)
+        .join(Project, ProjectApplication.project_id == Project.id)
+        .where(ProjectApplication.volunteer_id == volunteer_id)
+        .order_by(ProjectApplication.applied_at.desc())
+    )
+    rows = result.all()
+    return [
+        {
+            "application_id": str(row.ProjectApplication.id),
+            "project_id": str(row.ProjectApplication.project_id),
+            "project_name": row.name,
+            "program": row.program,
+            "project_status": row.status.value,
+            "application_status": row.ProjectApplication.status.value,
+            "applied_at": row.ProjectApplication.applied_at,
+            "start_date": row.start_date,
+            "end_date": row.end_date,
+        }
+        for row in rows
+    ]
