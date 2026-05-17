@@ -11,11 +11,12 @@ from app.core.auth import require_admin, require_volunteer, get_current_user
 from app.core.database import get_db
 from app.models.project import ApplicationStatus, EffortLogStatus, Project, ProjectApplication, ProjectDocument, ProjectEffortLog, ProjectSkill
 from app.models.user import User, UserRole
-from app.models.volunteer import Volunteer
+from app.models.volunteer import ApprovalStatus, Volunteer, VolunteerSkill
 from app.schemas.project import (
     ApplicationCreate, ApplicationResponse, ApplicationStatusUpdate,
     EffortLogCreate, EffortLogResponse, EffortLogStatusUpdate,
     ProjectCreate, ProjectDocumentResponse, ProjectResponse, ProjectUpdate,
+    VolunteerSuggestion,
 )
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -146,6 +147,81 @@ async def delete_project(
     p = await _get_project_or_404(db, project_id)
     await db.delete(p)
     await db.commit()
+
+
+@router.get("/{project_id}/suggestions", response_model=list[VolunteerSuggestion])
+async def get_volunteer_suggestions(
+    project_id: UUID,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_project_or_404(db, project_id)
+
+    # Collect project matching criteria
+    project_skills = {s.skill.lower() for s in p.skills}
+    project_location = (p.location or "").lower().strip()
+    project_program = (p.program or "").lower().strip()
+
+    # IDs of volunteers who already applied
+    applied_result = await db.execute(
+        select(ProjectApplication.volunteer_id).where(ProjectApplication.project_id == project_id)
+    )
+    already_applied = {row[0] for row in applied_result.all()}
+
+    # Load all approved volunteers with their skills
+    vol_result = await db.execute(
+        select(Volunteer)
+        .options(selectinload(Volunteer.skills))
+        .where(Volunteer.approval_status == ApprovalStatus.approved)
+    )
+    volunteers = vol_result.scalars().all()
+
+    suggestions = []
+    for v in volunteers:
+        if v.id in already_applied:
+            continue
+
+        reasons = []
+        score = 0
+
+        # Skill match
+        vol_skills = {s.skill.lower() for s in v.skills}
+        matched_skills = project_skills & vol_skills
+        if matched_skills:
+            score += len(matched_skills)
+            reasons.append(f"Skills: {', '.join(sorted(matched_skills))}")
+
+        # Location match (preferred_district or district vs project location)
+        if project_location:
+            vol_location = (v.preferred_district or v.district or "").lower().strip()
+            if vol_location and project_location in vol_location or vol_location in project_location:
+                score += 2
+                reasons.append("Location match")
+
+        # Program match
+        if project_program:
+            vol_program = (v.preferred_program or "").lower().strip()
+            if vol_program and (project_program in vol_program or vol_program in project_program):
+                score += 2
+                reasons.append("Program match")
+
+        if score > 0:
+            suggestions.append(VolunteerSuggestion(
+                id=v.id,
+                name=v.name,
+                email=v.email,
+                phone=v.phone,
+                district=v.district,
+                preferred_district=v.preferred_district,
+                preferred_program=v.preferred_program,
+                current_stage=v.current_stage.value,
+                skills=[s.skill for s in v.skills],
+                match_score=score,
+                match_reasons=reasons,
+            ))
+
+    suggestions.sort(key=lambda s: s.match_score, reverse=True)
+    return suggestions
 
 
 @router.post("/{project_id}/apply", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)

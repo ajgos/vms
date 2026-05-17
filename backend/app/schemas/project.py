@@ -87,6 +87,22 @@ class ProjectDocumentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VolunteerSuggestion(BaseModel):
+    id: UUID
+    name: str
+    email: Optional[str]
+    phone: Optional[str]
+    district: Optional[str]
+    preferred_district: Optional[str]
+    preferred_program: Optional[str]
+    current_stage: str
+    skills: list[str] = []
+    match_score: int
+    match_reasons: list[str] = []
+
+    model_config = {"from_attributes": True}
+
+
 class EffortLogCreate(BaseModel):
     date: datetime
     hours: float

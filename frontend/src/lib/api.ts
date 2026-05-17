@@ -154,3 +154,17 @@ export interface EffortLog {
   reviewed_at?: string;
   volunteer_name?: string;
 }
+
+export interface VolunteerSuggestion {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  district?: string;
+  preferred_district?: string;
+  preferred_program?: string;
+  current_stage: string;
+  skills: string[];
+  match_score: number;
+  match_reasons: string[];
+}

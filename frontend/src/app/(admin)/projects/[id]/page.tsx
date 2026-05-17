@@ -2,10 +2,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import api, { Project, ProjectApplication, ProjectDocument, EffortLog } from "@/lib/api";
+import api, { Project, ProjectApplication, ProjectDocument, EffortLog, VolunteerSuggestion } from "@/lib/api";
 import {
   ArrowLeft, Calendar, MapPin, Users, CheckCircle2, XCircle,
-  Clock, Pencil, FolderKanban, FileText, ExternalLink, Trash2, Upload, Activity,
+  Clock, Pencil, FileText, ExternalLink, Trash2, Upload, Activity,
+  Sparkles, Link2, X, Check,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -31,6 +32,11 @@ export default function ProjectDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [suggestions, setSuggestions] = useState<VolunteerSuggestion[] | null>(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [selectedVolunteers, setSelectedVolunteers] = useState<Set<string>>(new Set());
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api.get<Project>(`/projects/${id}`).then((r) => {
@@ -80,6 +86,44 @@ export default function ProjectDetailPage() {
   const reviewLog = async (logId: string, status: "approved" | "rejected") => {
     const res = await api.patch<EffortLog>(`/projects/${id}/logs/${logId}`, { status });
     setEffortLogs((prev) => prev.map((l) => l.id === logId ? res.data : l));
+  };
+
+  const loadSuggestions = async () => {
+    if (suggestions !== null) return;
+    setLoadingSuggestions(true);
+    try {
+      const res = await api.get<VolunteerSuggestion[]>(`/projects/${id}/suggestions`);
+      setSuggestions(res.data);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const toggleVolunteer = (vid: string) => {
+    setSelectedVolunteers((prev) => {
+      const next = new Set(prev);
+      next.has(vid) ? next.delete(vid) : next.add(vid);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!suggestions) return;
+    if (selectedVolunteers.size === suggestions.length) {
+      setSelectedVolunteers(new Set());
+    } else {
+      setSelectedVolunteers(new Set(suggestions.map((s) => s.id)));
+    }
+  };
+
+  const inviteLink = typeof window !== "undefined"
+    ? `${window.location.origin}/register?project=${id}`
+    : `/register?project=${id}`;
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (!project) {
@@ -358,19 +402,142 @@ export default function ProjectDetailPage() {
             </Link>
           </div>
 
-          {/* Shareable link */}
+          {/* Invite Volunteers */}
           <div className="card p-5 space-y-3">
             <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Invite Volunteers</h2>
-            <p className="text-xs text-slate-500">Share the registration link so volunteers can sign up and apply.</p>
+            <p className="text-xs text-slate-500">Find matching volunteers or copy the registration link to share.</p>
             <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/register`)}
-              className="btn-secondary w-full text-sm"
+              onClick={() => { loadSuggestions(); }}
+              disabled={loadingSuggestions}
+              className="btn-secondary w-full flex items-center justify-center gap-2 text-sm"
             >
-              Copy Registration Link
+              <Sparkles className="w-3.5 h-3.5" />
+              {loadingSuggestions ? "Loading…" : suggestions === null ? "Find Matching Volunteers" : `${suggestions.length} suggestion${suggestions.length !== 1 ? "s" : ""}`}
             </button>
+            {suggestions !== null && suggestions.length > 0 && (
+              <button
+                onClick={() => setShowInviteModal(true)}
+                disabled={selectedVolunteers.size === 0}
+                className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Invite Selected ({selectedVolunteers.size})
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Suggestions panel — full width below the grid */}
+      {suggestions !== null && (
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+            <Sparkles className="w-4 h-4 text-primary-500" />
+            <h2 className="text-sm font-semibold text-slate-700">Volunteer Suggestions</h2>
+            <span className="text-xs text-slate-400">{suggestions.length} matched</span>
+            {suggestions.length > 0 && (
+              <button
+                onClick={toggleAll}
+                className="ml-auto text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+              >
+                {selectedVolunteers.size === suggestions.length ? "Deselect all" : "Select all"}
+              </button>
+            )}
+          </div>
+          {suggestions.length === 0 ? (
+            <div className="px-5 py-10 text-center text-slate-400 text-sm">
+              No matching volunteers found. Add skills, location, or program to the project to get suggestions.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {suggestions.map((v) => (
+                <label key={v.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50 cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                    checked={selectedVolunteers.has(v.id)}
+                    onChange={() => toggleVolunteer(v.id)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-slate-800">{v.name}</p>
+                      <span className="text-xs text-slate-400">{v.email || v.phone || ""}</span>
+                    </div>
+                    {v.district && (
+                      <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />{v.district}
+                        {v.preferred_district && v.preferred_district !== v.district && ` · prefers ${v.preferred_district}`}
+                      </p>
+                    )}
+                    {v.skills.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {v.skills.slice(0, 5).map((s) => (
+                          <span key={s} className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{s}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {v.match_reasons.map((r) => (
+                        <span key={r} className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full font-medium">{r}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-xs font-bold text-primary-600 flex-shrink-0 mt-0.5">{v.match_score}pt</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invite modal */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Invite Volunteers</h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Share this link with {selectedVolunteers.size} selected volunteer{selectedVolunteers.size !== 1 ? "s" : ""}.
+                </p>
+              </div>
+              <button onClick={() => setShowInviteModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+              <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Registration Link</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 truncate">
+                  {inviteLink}
+                </code>
+                <button
+                  onClick={copyLink}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg transition-colors flex-shrink-0 ${copied ? "bg-emerald-50 text-emerald-700" : "bg-primary-50 text-primary-700 hover:bg-primary-100"}`}
+                >
+                  {copied ? <><Check className="w-3.5 h-3.5" /> Copied!</> : <><Link2 className="w-3.5 h-3.5" /> Copy</>}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 rounded-xl px-4 py-3 text-xs text-amber-700 space-y-1">
+              <p className="font-medium">Selected volunteers ({selectedVolunteers.size}):</p>
+              <p className="text-amber-600">
+                {suggestions?.filter((s) => selectedVolunteers.has(s.id)).map((s) => s.name).join(", ")}
+              </p>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Email and WhatsApp delivery will be available in a future update. For now, copy the link and share manually.
+            </p>
+
+            <button onClick={() => setShowInviteModal(false)} className="btn-secondary w-full">
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
