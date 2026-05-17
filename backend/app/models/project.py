@@ -42,7 +42,6 @@ class Project(Base):
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
     location = Column(String(255), nullable=True)
-    # Reuse existing activitymode PG enum; create_type=False avoids re-creating it
     mode = Column(Enum("online", "offline", "hybrid", name="activitymode", create_type=False), nullable=True)
     capacity = Column(Integer, nullable=True)
     effort_approval = Column(Enum(EffortApproval), nullable=False, default=EffortApproval.auto)
@@ -117,47 +116,3 @@ class ProjectEffortLog(Base):
     project = relationship("Project", back_populates="effort_logs")
     volunteer = relationship("Volunteer")
     reviewer = relationship("User", foreign_keys=[reviewed_by])
-
-
-
-class ProjectSkill(Base):
-    __tablename__ = "project_skills"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    skill = Column(String(255), nullable=False)
-
-    project = relationship("Project", back_populates="skills")
-
-
-class ProjectApplication(Base):
-    __tablename__ = "project_applications"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    volunteer_id = Column(UUID(as_uuid=True), ForeignKey("volunteers.id", ondelete="CASCADE"), nullable=False)
-    status = Column(Enum(ApplicationStatus), nullable=False, default=ApplicationStatus.pending)
-    message = Column(Text, nullable=True)
-    applied_at = Column(DateTime(timezone=True), server_default=func.now())
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    reviewed_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-
-    project = relationship("Project", back_populates="applications")
-    volunteer = relationship("Volunteer")
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
-
-    __table_args__ = (UniqueConstraint("project_id", "volunteer_id"),)
-
-
-class ProjectDocument(Base):
-    __tablename__ = "project_documents"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String(255), nullable=False)
-    file_url = Column(String(512), nullable=False)
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
-
-    project = relationship("Project", back_populates="documents")
-    uploader = relationship("User", foreign_keys=[uploaded_by])
