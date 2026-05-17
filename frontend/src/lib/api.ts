@@ -129,3 +129,12 @@ export interface ProjectApplication {
   reviewed_at?: string;
   volunteer_name?: string;
 }
+
+export interface ProjectDocument {
+  id: string;
+  project_id: string;
+  name: string;
+  file_url: string;
+  uploaded_by?: string;
+  uploaded_at: string;
+}

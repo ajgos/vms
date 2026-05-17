@@ -1,26 +1,35 @@
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import require_admin, require_volunteer, get_current_user
 from app.core.database import get_db
-from app.models.project import ApplicationStatus, Project, ProjectApplication, ProjectSkill
+from app.models.project import ApplicationStatus, Project, ProjectApplication, ProjectDocument, ProjectSkill
 from app.models.user import User, UserRole
 from app.models.volunteer import Volunteer
 from app.schemas.project import (
     ApplicationCreate, ApplicationResponse, ApplicationStatusUpdate,
-    ProjectCreate, ProjectResponse, ProjectUpdate,
+    ProjectCreate, ProjectDocumentResponse, ProjectResponse, ProjectUpdate,
 )
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
+DOCS_DIR = Path("/app/uploads/project-docs")
+ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp",
+                 "application/msword",
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                 "application/vnd.ms-excel",
+                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
 
 def _load_opts():
-    return [selectinload(Project.skills), selectinload(Project.applications)]
+    return [selectinload(Project.skills), selectinload(Project.applications), selectinload(Project.documents)]
 
 
 async def _build_project_response(p: Project) -> ProjectResponse:
@@ -220,3 +229,82 @@ def _build_app_response(app: ProjectApplication, volunteer_name) -> ApplicationR
         reviewed_at=app.reviewed_at,
         volunteer_name=volunteer_name,
     )
+
+
+@router.get("/{project_id}/documents", response_model=list[ProjectDocumentResponse])
+async def list_project_documents(
+    project_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_project_or_404(db, project_id)
+    result = await db.execute(
+        select(ProjectDocument)
+        .where(ProjectDocument.project_id == project_id)
+        .order_by(ProjectDocument.uploaded_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/{project_id}/documents", response_model=ProjectDocumentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_project_document(
+    project_id: UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_project_or_404(db, project_id)
+
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Allowed: PDF, JPG, PNG, WebP, Word, Excel.",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large. Maximum size is 10 MB.",
+        )
+
+    original_name = Path(file.filename or "document").name
+    suffix = Path(original_name).suffix.lower() or ".bin"
+    unique_name = f"{project_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}{suffix}"
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    (DOCS_DIR / unique_name).write_bytes(contents)
+
+    doc = ProjectDocument(
+        project_id=project_id,
+        name=original_name,
+        file_url=f"/uploads/project-docs/{unique_name}",
+        uploaded_by=user.id,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+@router.delete("/{project_id}/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project_document(
+    project_id: UUID,
+    doc_id: UUID,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ProjectDocument).where(
+            ProjectDocument.id == doc_id,
+            ProjectDocument.project_id == project_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    file_path = Path(f"/app{doc.file_url}")
+    if file_path.exists():
+        file_path.unlink()
+    await db.delete(doc)
+    await db.commit()
+

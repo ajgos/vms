@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import api, { Project, ProjectApplication } from "@/lib/api";
+import api, { Project, ProjectApplication, ProjectDocument } from "@/lib/api";
 import {
   ArrowLeft, Calendar, MapPin, Users, CheckCircle2, XCircle,
-  Clock, Pencil, FolderKanban,
+  Clock, Pencil, FolderKanban, FileText, ExternalLink, Trash2, Upload,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -24,8 +24,12 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [applications, setApplications] = useState<ProjectApplication[]>([]);
+  const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [editing, setEditing] = useState(false);
   const [statusValue, setStatusValue] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.get<Project>(`/projects/${id}`).then((r) => {
@@ -33,6 +37,7 @@ export default function ProjectDetailPage() {
       setStatusValue(r.data.status);
     });
     api.get<ProjectApplication[]>(`/projects/${id}/applications`).then((r) => setApplications(r.data));
+    api.get<ProjectDocument[]>(`/projects/${id}/documents`).then((r) => setDocuments(r.data));
   }, [id]);
 
   const updateStatus = async (newStatus: string) => {
@@ -45,6 +50,29 @@ export default function ProjectDetailPage() {
   const reviewApp = async (appId: string, status: "approved" | "rejected") => {
     const res = await api.patch<ProjectApplication>(`/projects/${id}/applications/${appId}`, { status });
     setApplications((prev) => prev.map((a) => a.id === appId ? res.data : a));
+  };
+
+  const uploadDocument = async (file: File) => {
+    setUploadError("");
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await api.post<ProjectDocument>(`/projects/${id}/documents`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setDocuments((prev) => [res.data, ...prev]);
+    } catch {
+      setUploadError("Upload failed. Max 10 MB. PDF, JPG, PNG, WebP, Word or Excel.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const deleteDocument = async (docId: string) => {
+    await api.delete(`/projects/${id}/documents/${docId}`);
+    setDocuments((prev) => prev.filter((d) => d.id !== docId));
   };
 
   if (!project) {
@@ -182,6 +210,65 @@ export default function ProjectDetailPage() {
               <p>No applications yet.</p>
             </div>
           )}
+
+          {/* Documents */}
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-700">Documents ({documents.length})</h2>
+              </div>
+              <label className={`flex items-center gap-1.5 text-xs font-medium cursor-pointer px-3 py-1.5 rounded-lg border transition-colors ${uploading ? "opacity-50 cursor-not-allowed border-slate-200 text-slate-400" : "border-primary-200 text-primary-600 hover:bg-primary-50"}`}>
+                <Upload className="w-3.5 h-3.5" />
+                {uploading ? "Uploading…" : "Upload"}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDocument(f); }}
+                />
+              </label>
+            </div>
+            {uploadError && (
+              <div className="px-5 py-2 text-xs text-red-500 bg-red-50">{uploadError}</div>
+            )}
+            {documents.length === 0 ? (
+              <div className="px-5 py-8 text-center text-slate-400 text-sm">No documents uploaded yet.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {documents.map((doc) => {
+                  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                  return (
+                    <div key={doc.id} className="px-5 py-3 flex items-center gap-3">
+                      <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 font-medium truncate">{doc.name}</p>
+                        <p className="text-xs text-slate-400">{new Date(doc.uploaded_at).toLocaleDateString()}</p>
+                      </div>
+                      <a
+                        href={`${API_URL}${doc.file_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                        title="View"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                      <button
+                        onClick={() => deleteDocument(doc.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}

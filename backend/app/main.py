@@ -13,6 +13,7 @@ from app.core.config import settings
 
 UPLOADS_DIR = "/app/uploads"
 os.makedirs(f"{UPLOADS_DIR}/id-proofs", exist_ok=True)
+os.makedirs(f"{UPLOADS_DIR}/project-docs", exist_ok=True)
 
 app = FastAPI(title="Volunteer Management System", version="1.0.0")
 

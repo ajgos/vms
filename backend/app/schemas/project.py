@@ -71,3 +71,14 @@ class ApplicationResponse(BaseModel):
     volunteer_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class ProjectDocumentResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    name: str
+    file_url: str
+    uploaded_by: Optional[UUID]
+    uploaded_at: datetime
+
+    model_config = {"from_attributes": True}
