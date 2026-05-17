@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import api, { Project, ProjectApplication } from "@/lib/api";
-import { FolderKanban, Calendar, MapPin, Users, CheckCircle2, Clock } from "lucide-react";
+import api, { Project, ProjectApplication, ProjectDocument } from "@/lib/api";
+import { FolderKanban, Calendar, MapPin, Users, CheckCircle2, Clock, FileText, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 
 const MODE_COLORS: Record<string, string> = {
   online:  "bg-blue-50 text-blue-700",
@@ -9,12 +9,17 @@ const MODE_COLORS: Record<string, string> = {
   hybrid:  "bg-violet-50 text-violet-700",
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function VolunteerProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [applications, setApplications] = useState<Record<string, ProjectApplication>>({});
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
   const [message, setMessage] = useState<Record<string, string>>({});
+  const [expandedDocs, setExpandedDocs] = useState<Record<string, boolean>>({});
+  const [documents, setDocuments] = useState<Record<string, ProjectDocument[]>>({});
+  const [loadingDocs, setLoadingDocs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     Promise.all([
@@ -37,6 +42,20 @@ export default function VolunteerProjectsPage() {
       setMessage((prev) => ({ ...prev, [projectId]: "" }));
     } finally {
       setApplying(null);
+    }
+  };
+
+  const toggleDocs = async (projectId: string) => {
+    const nowExpanded = !expandedDocs[projectId];
+    setExpandedDocs((prev) => ({ ...prev, [projectId]: nowExpanded }));
+    if (nowExpanded && !documents[projectId]) {
+      setLoadingDocs((prev) => ({ ...prev, [projectId]: true }));
+      try {
+        const res = await api.get<ProjectDocument[]>(`/projects/${projectId}/documents`);
+        setDocuments((prev) => ({ ...prev, [projectId]: res.data }));
+      } finally {
+        setLoadingDocs((prev) => ({ ...prev, [projectId]: false }));
+      }
     }
   };
 
@@ -67,6 +86,7 @@ export default function VolunteerProjectsPage() {
         {projects.map((p) => {
           const myApp = applications[p.id];
           const isFull = p.capacity != null && p.application_count >= p.capacity;
+          const isApproved = myApp?.status === "approved";
 
           return (
             <div key={p.id} className="card p-5 space-y-4">
@@ -112,6 +132,46 @@ export default function VolunteerProjectsPage() {
                   {p.skills.map((s) => (
                     <span key={s} className="bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-md">{s}</span>
                   ))}
+                </div>
+              )}
+
+              {isApproved && (
+                <div className="border-t border-slate-100 pt-3">
+                  <button
+                    onClick={() => toggleDocs(p.id)}
+                    className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-primary-600 transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Project Documents
+                    {expandedDocs[p.id] ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+
+                  {expandedDocs[p.id] && (
+                    <div className="mt-3 space-y-2">
+                      {loadingDocs[p.id] ? (
+                        <div className="flex items-center gap-2 text-xs text-slate-400">
+                          <div className="w-3 h-3 border border-slate-300 border-t-transparent rounded-full animate-spin" />
+                          Loading…
+                        </div>
+                      ) : documents[p.id]?.length === 0 ? (
+                        <p className="text-xs text-slate-400">No documents uploaded yet.</p>
+                      ) : (
+                        documents[p.id]?.map((doc) => (
+                          <a
+                            key={doc.id}
+                            href={`${API_URL}${doc.file_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2.5 p-2.5 rounded-lg bg-slate-50 hover:bg-primary-50 transition-colors group"
+                          >
+                            <FileText className="w-4 h-4 text-slate-400 group-hover:text-primary-500 flex-shrink-0" />
+                            <span className="text-sm text-slate-700 group-hover:text-primary-700 flex-1 min-w-0 truncate">{doc.name}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-primary-500 flex-shrink-0" />
+                          </a>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
