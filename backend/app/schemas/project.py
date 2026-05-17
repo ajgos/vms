@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.models.project import ApplicationStatus, ProjectStatus
+from app.models.project import ApplicationStatus, EffortApproval, EffortLogStatus, ProjectStatus
 
 
 class ProjectCreate(BaseModel):
@@ -18,6 +18,7 @@ class ProjectCreate(BaseModel):
     mode: Optional[str] = None
     capacity: Optional[int] = None
     skills: list[str] = []
+    effort_approval: EffortApproval = EffortApproval.auto
 
 
 class ProjectUpdate(BaseModel):
@@ -31,6 +32,7 @@ class ProjectUpdate(BaseModel):
     mode: Optional[str] = None
     capacity: Optional[int] = None
     skills: Optional[list[str]] = None
+    effort_approval: Optional[EffortApproval] = None
 
 
 class ProjectResponse(BaseModel):
@@ -45,6 +47,7 @@ class ProjectResponse(BaseModel):
     mode: Optional[str]
     capacity: Optional[int]
     skills: list[str] = []
+    effort_approval: EffortApproval
     created_at: datetime
     updated_at: datetime
     application_count: int = 0
@@ -80,5 +83,30 @@ class ProjectDocumentResponse(BaseModel):
     file_url: str
     uploaded_by: Optional[UUID]
     uploaded_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EffortLogCreate(BaseModel):
+    date: datetime
+    hours: float
+    description: Optional[str] = None
+
+
+class EffortLogStatusUpdate(BaseModel):
+    status: EffortLogStatus
+
+
+class EffortLogResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    volunteer_id: UUID
+    date: datetime
+    hours: float
+    description: Optional[str]
+    status: EffortLogStatus
+    created_at: datetime
+    reviewed_at: Optional[datetime]
+    volunteer_name: Optional[str] = None
 
     model_config = {"from_attributes": True}

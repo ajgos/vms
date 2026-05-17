@@ -9,11 +9,12 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth import require_admin, require_volunteer, get_current_user
 from app.core.database import get_db
-from app.models.project import ApplicationStatus, Project, ProjectApplication, ProjectDocument, ProjectSkill
+from app.models.project import ApplicationStatus, EffortLogStatus, Project, ProjectApplication, ProjectDocument, ProjectEffortLog, ProjectSkill
 from app.models.user import User, UserRole
 from app.models.volunteer import Volunteer
 from app.schemas.project import (
     ApplicationCreate, ApplicationResponse, ApplicationStatusUpdate,
+    EffortLogCreate, EffortLogResponse, EffortLogStatusUpdate,
     ProjectCreate, ProjectDocumentResponse, ProjectResponse, ProjectUpdate,
 )
 
@@ -29,7 +30,12 @@ MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def _load_opts():
-    return [selectinload(Project.skills), selectinload(Project.applications), selectinload(Project.documents)]
+    return [
+        selectinload(Project.skills),
+        selectinload(Project.applications),
+        selectinload(Project.documents),
+        selectinload(Project.effort_logs),
+    ]
 
 
 async def _build_project_response(p: Project) -> ProjectResponse:
@@ -307,4 +313,122 @@ async def delete_project_document(
         file_path.unlink()
     await db.delete(doc)
     await db.commit()
+
+
+# ── Effort Logs ──────────────────────────────────────────────────────────────
+
+@router.post("/{project_id}/logs", response_model=EffortLogResponse, status_code=status.HTTP_201_CREATED)
+async def create_effort_log(
+    project_id: UUID,
+    payload: EffortLogCreate,
+    user: User = Depends(require_volunteer),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_project_or_404(db, project_id)
+
+    approved_app = await db.execute(
+        select(ProjectApplication).where(
+            ProjectApplication.project_id == project_id,
+            ProjectApplication.volunteer_id == user.volunteer_id,
+            ProjectApplication.status == "approved",
+        )
+    )
+    if not approved_app.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an approved volunteer for this project")
+
+    log_status = EffortLogStatus.approved if p.effort_approval.value == "auto" else EffortLogStatus.pending
+    log = ProjectEffortLog(
+        project_id=project_id,
+        volunteer_id=user.volunteer_id,
+        date=payload.date,
+        hours=payload.hours,
+        description=payload.description,
+        status=log_status,
+    )
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    vol = await db.get(Volunteer, user.volunteer_id)
+    return _build_effort_response(log, vol.name if vol else None)
+
+
+@router.get("/{project_id}/logs", response_model=list[EffortLogResponse])
+async def list_effort_logs(
+    project_id: UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _get_project_or_404(db, project_id)
+    q = (
+        select(ProjectEffortLog, Volunteer.name)
+        .join(Volunteer, ProjectEffortLog.volunteer_id == Volunteer.id)
+        .where(ProjectEffortLog.project_id == project_id)
+    )
+    if user.role == UserRole.volunteer:
+        q = q.where(ProjectEffortLog.volunteer_id == user.volunteer_id)
+    q = q.order_by(ProjectEffortLog.date.desc())
+    rows = await db.execute(q)
+    return [_build_effort_response(log, name) for log, name in rows.all()]
+
+
+@router.patch("/{project_id}/logs/{log_id}", response_model=EffortLogResponse)
+async def review_effort_log(
+    project_id: UUID,
+    log_id: UUID,
+    payload: EffortLogStatusUpdate,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ProjectEffortLog, Volunteer.name)
+        .join(Volunteer, ProjectEffortLog.volunteer_id == Volunteer.id)
+        .where(ProjectEffortLog.id == log_id, ProjectEffortLog.project_id == project_id)
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found")
+    log, vol_name = row
+    log.status = payload.status
+    log.reviewed_at = datetime.now(timezone.utc)
+    log.reviewed_by = user.id
+    await db.commit()
+    await db.refresh(log)
+    return _build_effort_response(log, vol_name)
+
+
+@router.delete("/{project_id}/logs/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_effort_log(
+    project_id: UUID,
+    log_id: UUID,
+    user: User = Depends(require_volunteer),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(ProjectEffortLog).where(
+            ProjectEffortLog.id == log_id,
+            ProjectEffortLog.project_id == project_id,
+            ProjectEffortLog.volunteer_id == user.volunteer_id,
+            ProjectEffortLog.status == EffortLogStatus.pending,
+        )
+    )
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Log not found or cannot be deleted")
+    await db.delete(log)
+    await db.commit()
+
+
+def _build_effort_response(log: ProjectEffortLog, volunteer_name) -> EffortLogResponse:
+    return EffortLogResponse(
+        id=log.id,
+        project_id=log.project_id,
+        volunteer_id=log.volunteer_id,
+        date=log.date,
+        hours=log.hours,
+        description=log.description,
+        status=log.status,
+        created_at=log.created_at,
+        reviewed_at=log.reviewed_at,
+        volunteer_name=volunteer_name,
+    )
 

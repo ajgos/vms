@@ -27,6 +27,8 @@ export type ActivityMode = "online" | "offline" | "hybrid";
 export type ProjectStatus = "draft" | "active" | "closed";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type ApplicationStatus = "pending" | "approved" | "rejected";
+export type EffortApproval = "auto" | "manual";
+export type EffortLogStatus = "pending" | "approved" | "rejected";
 
 export interface Volunteer {
   id: string;
@@ -114,6 +116,7 @@ export interface Project {
   mode?: ActivityMode;
   capacity?: number;
   skills: string[];
+  effort_approval: EffortApproval;
   created_at: string;
   updated_at: string;
   application_count: number;
@@ -137,4 +140,17 @@ export interface ProjectDocument {
   file_url: string;
   uploaded_by?: string;
   uploaded_at: string;
+}
+
+export interface EffortLog {
+  id: string;
+  project_id: string;
+  volunteer_id: string;
+  date: string;
+  hours: number;
+  description?: string;
+  status: EffortLogStatus;
+  created_at: string;
+  reviewed_at?: string;
+  volunteer_name?: string;
 }

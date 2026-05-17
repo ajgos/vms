@@ -10,7 +10,7 @@ export default function NewProjectPage() {
   const [form, setForm] = useState({
     name: "", description: "", program: "", status: "draft",
     start_date: "", end_date: "", location: "", mode: "",
-    capacity: "", skills: "",
+    capacity: "", skills: "", effort_approval: "auto",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -35,6 +35,7 @@ export default function NewProjectPage() {
         mode: form.mode || undefined,
         capacity: form.capacity ? Number(form.capacity) : undefined,
         skills: form.skills ? form.skills.split(",").map((s) => s.trim()).filter(Boolean) : [],
+        effort_approval: form.effort_approval,
       });
       router.push(`/projects/${res.data.id}`);
     } catch {
@@ -117,6 +118,13 @@ export default function NewProjectPage() {
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Capacity (max volunteers)</label>
               <input type="number" className="input" value={form.capacity} onChange={set("capacity")} placeholder="e.g. 20" min={1} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">Effort Approval</label>
+              <select className="input" value={form.effort_approval} onChange={set("effort_approval")}>
+                <option value="auto">Auto-approve (no review needed)</option>
+                <option value="manual">Manual (admin reviews each log)</option>
+              </select>
             </div>
             <div className="col-span-1 sm:col-span-2">
               <label className="block text-xs font-medium text-slate-600 mb-1.5">Required Skills <span className="text-slate-400 font-normal">(comma-separated)</span></label>

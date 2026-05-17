@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import api, { Project, ProjectApplication, ProjectDocument } from "@/lib/api";
+import api, { Project, ProjectApplication, ProjectDocument, EffortLog } from "@/lib/api";
 import {
   ArrowLeft, Calendar, MapPin, Users, CheckCircle2, XCircle,
-  Clock, Pencil, FolderKanban, FileText, ExternalLink, Trash2, Upload,
+  Clock, Pencil, FolderKanban, FileText, ExternalLink, Trash2, Upload, Activity,
 } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -25,6 +25,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [applications, setApplications] = useState<ProjectApplication[]>([]);
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
+  const [effortLogs, setEffortLogs] = useState<EffortLog[]>([]);
   const [editing, setEditing] = useState(false);
   const [statusValue, setStatusValue] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -38,6 +39,7 @@ export default function ProjectDetailPage() {
     });
     api.get<ProjectApplication[]>(`/projects/${id}/applications`).then((r) => setApplications(r.data));
     api.get<ProjectDocument[]>(`/projects/${id}/documents`).then((r) => setDocuments(r.data));
+    api.get<EffortLog[]>(`/projects/${id}/logs`).then((r) => setEffortLogs(r.data));
   }, [id]);
 
   const updateStatus = async (newStatus: string) => {
@@ -73,6 +75,11 @@ export default function ProjectDetailPage() {
   const deleteDocument = async (docId: string) => {
     await api.delete(`/projects/${id}/documents/${docId}`);
     setDocuments((prev) => prev.filter((d) => d.id !== docId));
+  };
+
+  const reviewLog = async (logId: string, status: "approved" | "rejected") => {
+    const res = await api.patch<EffortLog>(`/projects/${id}/logs/${logId}`, { status });
+    setEffortLogs((prev) => prev.map((l) => l.id === logId ? res.data : l));
   };
 
   if (!project) {
@@ -266,6 +273,55 @@ export default function ProjectDetailPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Effort Logs */}
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-slate-700">Effort Logs ({effortLogs.length})</h2>
+              <span className={`ml-auto text-xs px-2 py-0.5 rounded-full font-medium ${project.effort_approval === "auto" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                {project.effort_approval === "auto" ? "Auto-approve" : "Manual review"}
+              </span>
+            </div>
+            {effortLogs.length === 0 ? (
+              <div className="px-5 py-8 text-center text-slate-400 text-sm">No effort logged yet.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {effortLogs.map((log) => (
+                  <div key={log.id} className="px-5 py-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-slate-800">{log.volunteer_name || "Volunteer"}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${log.status === "approved" ? "bg-emerald-50 text-emerald-700" : log.status === "rejected" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"}`}>
+                          {log.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {new Date(log.date).toLocaleDateString()} · <strong>{log.hours}h</strong>
+                        {log.description && ` · ${log.description}`}
+                      </p>
+                    </div>
+                    {log.status === "pending" && project.effort_approval === "manual" && (
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => reviewLog(log.id, "approved")}
+                          className="flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                        </button>
+                        <button
+                          onClick={() => reviewLog(log.id, "rejected")}
+                          className="flex items-center gap-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
