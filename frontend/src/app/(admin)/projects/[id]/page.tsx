@@ -126,7 +126,9 @@ export default function ProjectDetailPage() {
                 {pending.map((app) => (
                   <div key={app.id} className="px-5 py-4 flex items-center gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 truncate">{app.volunteer_name || "Volunteer"}</p>
+                      <Link href={`/volunteers/${app.volunteer_id}`} className="font-medium text-slate-800 hover:text-primary-600 truncate block transition-colors">
+                        {app.volunteer_name || "Volunteer"}
+                      </Link>
                       {app.message && <p className="text-xs text-slate-500 mt-0.5 truncate">{app.message}</p>}
                       <p className="text-xs text-slate-400 mt-0.5">{new Date(app.applied_at).toLocaleDateString()}</p>
                     </div>
@@ -161,7 +163,9 @@ export default function ProjectDetailPage() {
                 {reviewed.map((app) => (
                   <div key={app.id} className="px-5 py-3 flex items-center gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800 truncate">{app.volunteer_name || "Volunteer"}</p>
+                      <Link href={`/volunteers/${app.volunteer_id}`} className="font-medium text-slate-800 hover:text-primary-600 truncate block transition-colors">
+                        {app.volunteer_name || "Volunteer"}
+                      </Link>
                     </div>
                     <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize flex-shrink-0 ${APP_COLORS[app.status]}`}>
                       {app.status}
