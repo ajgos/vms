@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -92,14 +93,19 @@ async def create_volunteer(payload: VolunteerCreate, db: AsyncSession = Depends(
     v.languages = [VolunteerLanguage(language=l) for l in payload.languages]
     v.interests = [VolunteerInterest(interest=i) for i in payload.interests]
     db.add(v)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     # Record initial stage in history
     db.add(JourneyStageHistory(volunteer_id=v.id, from_stage=None, to_stage=v.current_stage))
     # Create blank onboarding checklist so dashboard counts are accurate from day one
     db.add(OnboardingChecklist(volunteer_id=v.id))
     await db.commit()
-    await db.refresh(v)
+    # Re-fetch with eager-loaded relationships to avoid lazy-load in async context
+    v = await _get_volunteer_or_404(db, v.id)
     return await _build_response(db, v)
 
 
