@@ -18,14 +18,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE effortapproval AS ENUM ('auto', 'manual')")
-    op.execute("CREATE TYPE effortlogstatus AS ENUM ('pending', 'approved', 'rejected')")
-
+    # Let op.add_column create effortapproval and op.create_table create effortlogstatus.
+    # Do NOT pre-create them with op.execute — Alembic reconstructs Enum objects internally
+    # and ignores create_type=False, causing a duplicate-type error if the type already exists.
     op.add_column(
         "projects",
         sa.Column(
             "effort_approval",
-            sa.Enum("auto", "manual", name="effortapproval", create_type=False),
+            sa.Enum("auto", "manual", name="effortapproval"),
             nullable=False,
             server_default="auto",
         ),
@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("hours", sa.Float, nullable=False),
         sa.Column("description", sa.Text, nullable=True),
-        sa.Column("status", sa.Enum("pending", "approved", "rejected", name="effortlogstatus", create_type=False),
+        sa.Column("status", sa.Enum("pending", "approved", "rejected", name="effortlogstatus"),
                   nullable=False, server_default="pending"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
@@ -57,5 +57,5 @@ def downgrade() -> None:
     op.drop_index("ix_project_effort_logs_project_id", table_name="project_effort_logs")
     op.drop_table("project_effort_logs")
     op.drop_column("projects", "effort_approval")
-    op.execute("DROP TYPE effortlogstatus")
-    op.execute("DROP TYPE effortapproval")
+    op.execute("DROP TYPE IF EXISTS effortlogstatus")
+    op.execute("DROP TYPE IF EXISTS effortapproval")
