@@ -25,7 +25,7 @@ def upgrade() -> None:
         "projects",
         sa.Column(
             "effort_approval",
-            sa.Enum("auto", "manual", name="effortapproval"),
+            sa.Enum("auto", "manual", name="effortapproval", create_type=False),
             nullable=False,
             server_default="auto",
         ),
@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("date", sa.DateTime(timezone=True), nullable=False),
         sa.Column("hours", sa.Float, nullable=False),
         sa.Column("description", sa.Text, nullable=True),
-        sa.Column("status", sa.Enum("pending", "approved", "rejected", name="effortlogstatus"),
+        sa.Column("status", sa.Enum("pending", "approved", "rejected", name="effortlogstatus", create_type=False),
                   nullable=False, server_default="pending"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),

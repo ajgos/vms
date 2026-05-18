@@ -44,7 +44,7 @@ class Project(Base):
     location = Column(String(255), nullable=True)
     mode = Column(Enum("online", "offline", "hybrid", name="activitymode", create_type=False), nullable=True)
     capacity = Column(Integer, nullable=True)
-    effort_approval = Column(Enum(EffortApproval), nullable=False, default=EffortApproval.auto)
+    effort_approval = Column(Enum(EffortApproval, name="effortapproval", create_type=False), nullable=False, default=EffortApproval.auto)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
