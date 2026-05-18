@@ -18,9 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Let op.add_column create effortapproval and op.create_table create effortlogstatus.
-    # Do NOT pre-create them with op.execute — Alembic reconstructs Enum objects internally
-    # and ignores create_type=False, causing a duplicate-type error if the type already exists.
+    # op.add_column does NOT emit CREATE TYPE — must create effortapproval explicitly first.
+    op.execute("CREATE TYPE effortapproval AS ENUM ('auto', 'manual')")
+
     op.add_column(
         "projects",
         sa.Column(
@@ -31,6 +31,8 @@ def upgrade() -> None:
         ),
     )
 
+    # op.create_table DOES emit CREATE TYPE automatically for any Enum column,
+    # so effortlogstatus must NOT be pre-created — let op.create_table handle it.
     op.create_table(
         "project_effort_logs",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
